@@ -6,10 +6,13 @@ using BankingApp.Agent;
 using BankingApp.Data;
 using BankingApp.Mcp;
 using BankingApp.Telemetry;
+using DotNetEnv;
 using OpenTelemetry;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+
+Env.Load();
 
 var builder = WebApplication.CreateBuilder(args);
 

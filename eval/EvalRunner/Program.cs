@@ -1,3 +1,4 @@
+using DotNetEnv;
 using Fde.Eval.Commands;
 
 namespace Fde.Eval;
@@ -6,6 +7,7 @@ public static class Program
 {
     public static async Task<int> Main(string[] args)
     {
+        Env.Load();
         if (args.Length == 0)
         {
             PrintUsage();

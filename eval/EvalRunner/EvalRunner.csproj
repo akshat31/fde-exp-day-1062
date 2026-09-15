@@ -13,6 +13,7 @@
          hardening grade). M2/M3 are BCL-only (HttpClient + System.Text.Json),
          same no-SDK rule as src/Leaderboard/LangfuseClient.cs. -->
     <PackageReference Include="Microsoft.AgentGovernance" Version="3.3.0" />
+    <PackageReference Include="DotNetEnv" Version="3.1.1" />
   </ItemGroup>
 
 </Project>
