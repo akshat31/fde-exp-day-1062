@@ -110,7 +110,7 @@ async Task<IResult> HandleChatRequest(HttpRequest request, HttpResponse response
 
     var traceId = (Activity.Current ?? activity)?.TraceId.ToHexString() ?? "";
     response.Headers["x-fde-trace-id"] = traceId;
-    return Results.Json(new { reply, traceId });
+    return Results.Json(new { response=reply, traceId });
 }
 
 static async Task<string> ReadMessageAsync(HttpRequest request)
