@@ -130,8 +130,8 @@ jobs:
             --name $CONTAINERAPP_NAME \
             --resource-group $RESOURCE_GROUP \
             --server ghcr.io \
-            --username ${{ steps.owner.outputs.owner }} \
-            --password ${{ secrets.FDE_PARTICIPANT_GHCR_PAT }}
+            --username ${{ github.repository_owner }} \
+            --password ${{ secrets.GITHUB_TOKEN }}
 
       # Ensure ingress target port matches the app (ASPNETCORE_URLS=
       # http://+:8080). Participant CAs are typically provisioned from
