@@ -1,10 +1,17 @@
+using Microsoft.Agents.AI;
+
 namespace Fde.Eval.Commands;
 
 /// <summary>
 /// Milestone 2 — post-deploy functional check. Sends a natural-language balance query
 /// for the deterministic seed customer (Maria Chen, account 101, $4523.10) and exact-matches
-/// the expected figure. Deterministic seed data makes an exact check correct here — a false
-/// pass must be structurally impossible, so there is no fuzzy/LLM judging.
+/// the expected figure via LocalEvaluator.KeywordCheck. Deterministic seed data makes an
+/// exact check correct here — a false pass must be structurally impossible, so there is
+/// no fuzzy/LLM judging.
+///
+/// NOTE: ToolCalledCheck is NOT used here because the /chat contract returns only
+/// {response, traceId} — the EvalItem builds a text-only conversation with no
+/// FunctionCallContent, so ToolCalledCheck would always false-fail.
 /// </summary>
 public static class Milestone2Command
 {
@@ -21,9 +28,18 @@ public static class Milestone2Command
         Console.WriteLine($"[m2] url={url}");
         var reply = await AskWithRetryAsync(agent, url, Query);
 
-        var passed = reply.Text.Contains(ExpectedBalance, StringComparison.OrdinalIgnoreCase);
+        var evalItem = new EvalItem(Query, reply.Text);
+        var evaluator = new LocalEvaluator(EvalChecks.KeywordCheck(ExpectedBalance));
+        var results = await evaluator.EvaluateAsync(new[] { evalItem }, "milestone2");
+        var passed = results.AllPassed;
+
         Console.WriteLine($"[m2] reply: {Truncate(reply.Text)}");
         Console.WriteLine($"[m2] traceId: {reply.TraceId ?? "(none)"}");
+        foreach (var kv in results.Items[0].Metrics)
+        {
+            var failed = kv.Value.Interpretation?.Failed ?? true;
+            Console.WriteLine($"[m2] {kv.Key}: {(failed ? "FAIL" : "PASS")} — {kv.Value.Interpretation?.Reason ?? kv.Value.Reason}");
+        }
         Console.WriteLine(passed
             ? $"[m2] PASS — reply contains {ExpectedBalance}"
             : $"[m2] FAIL — reply does not contain {ExpectedBalance}");
