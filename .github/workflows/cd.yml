@@ -73,18 +73,14 @@ jobs:
             "tenantId":"${{ secrets.FDE_SP_TENANT_ID }}",
             "subscriptionId":"${{ secrets.FDE_SP_SUBSCRIPTION_ID }}"}
 
-      # GHCR image paths must be lowercase and the image MUST live in the
-      # namespace that owns this repository — the GITHUB_TOKEN push below
-      # authenticates as that owner's installation, so the image owner has
-      # to be github.repository_owner, NOT github.actor (a dispatch run
-      # can be triggered by someone who doesn't own the fork/repo, which
-      # would push into a namespace the token's installation cannot write
-      # to: "denied: permission_denied: The requested installation does
-      # not exist."). Normalizing here (same `tr` guard as the proven
-      # ADLC pipeline) keeps GitHub handles case-insensitive.
+      # GHCR requires lowercase image paths even though the tag itself is
+      # called out as a private-namespace image — github.actor is already
+      # lowercase for usernames, but normalizing here (same `tr` guard as
+      # the proven ADLC pipeline) makes it robust to dispatch runs where
+      # the actor may differ from the fork owner.
       - name: Lowercase image owner
         id: owner
-        run: echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >>
+        run: echo "owner=$(echo '${{ github.actor }}' | tr '[:upper:]' '[:lower:]')" >>
           "$GITHUB_OUTPUT"
 
       # GHCR login uses the ephemeral, auto-provided GITHUB_TOKEN —
@@ -99,7 +95,7 @@ jobs:
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
-          username: ${{ github.repository_owner }}
+          username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # Build happens ON the runner (GitHub's own compute, not the
@@ -115,7 +111,7 @@ jobs:
           context: .
           file: Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/banking-app:${{ github.sha }}
+          tags: ghcr.io/${{ steps.owner.outputs.owner }}/banking-app:${{ github.sha }}
 
       # Container Apps needs its own, persistent credential to pull —
       # GITHUB_TOKEN above only lives for this job's duration. Uses the
