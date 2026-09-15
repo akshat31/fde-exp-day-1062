@@ -130,7 +130,7 @@ jobs:
             --name $CONTAINERAPP_NAME \
             --resource-group $RESOURCE_GROUP \
             --server ghcr.io \
-            --username ${{ github.repository_owner }} \
+            --username ${{ github.actor }} \
             --password ${{ secrets.GITHUB_TOKEN }}
 
       # Ensure ingress target port matches the app (ASPNETCORE_URLS=
