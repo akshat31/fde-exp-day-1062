@@ -116,8 +116,8 @@ jobs:
           file: Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ steps.repo.outputs.repo }}/banking-app:${{ github.sha }}
-            ghcr.io/${{ steps.repo.outputs.repo }}/banking-app:latest
+            ghcr.io/${{ steps.string.outputs.repo_path }}/banking-app:${{ github.sha }}
+            ghcr.io/${{ steps.string.outputs.repo_path }}/banking-app:latest
 
       # Container Apps needs its own, persistent credential to pull —
       # GITHUB_TOKEN above only lives for this job's duration. Uses the
