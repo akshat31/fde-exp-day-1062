@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using BankingApp;
@@ -6,6 +6,7 @@ using BankingApp.Agent;
 using BankingApp.Data;
 using BankingApp.Mcp;
 using BankingApp.Telemetry;
+using BankingApp.Tools;
 using DotNetEnv;
 using OpenTelemetry;
 using OpenTelemetry.Exporter;
@@ -20,7 +21,7 @@ var fde = new FdeOptions(builder.Configuration);
 
 // ---- Telemetry: ONE OTel pipeline, built once. The participant-attribute
 // span processor is the consolidated host's replacement for the two separate
-// OTel setups the two source projects each had — no double registration.
+// OTel setups the two source projects each had â€” no double registration.
 // OTLP export only when the deploy env supplies the Langfuse endpoint.
 if (!string.IsNullOrWhiteSpace(fde.LangfuseOtlpEndpoint))
 {
@@ -45,6 +46,7 @@ if (!string.IsNullOrWhiteSpace(fde.LangfuseOtlpEndpoint))
 builder.Services.AddSingleton(fde);
 builder.Services.AddSingleton<BankingDbConnectionFactory>();
 builder.Services.AddSingleton<BankingDbSeeder>();
+builder.Services.AddSingleton<AccountTools>();
 builder.Services.AddSingleton<McpToolCatalog>();
 builder.Services.AddSingleton<McpAgentRuntime>();
 builder.Services.AddSingleton<McpHttpEndpoint>();
@@ -53,7 +55,7 @@ var app = builder.Build();
 
 // Output-side system-prompt disclosure guard: if the agent echoes a
 // distinctive SystemPrompt.md line, /chat returns a denial instead. This is the
-// deterministic enforcement for M3 S3 — the prompt's own rules are probabilistic
+// deterministic enforcement for M3 S3 â€” the prompt's own rules are probabilistic
 // by nature and cannot be trusted to stop an echo.
 var promptGuard = SystemPromptGuard.Load(Path.Combine(app.Environment.ContentRootPath, "SystemPrompt.md"));
 
@@ -66,12 +68,12 @@ try
 }
 catch (Exception ex)
 {
-    app.Logger.LogWarning(ex, "Unable to seed legacy_bank.db — continuing (tools will report missing data if the file is absent).");
+    app.Logger.LogWarning(ex, "Unable to seed legacy_bank.db â€” continuing (tools will report missing data if the file is absent).");
 }
 
 // ---- Health endpoints. cd.yml needs BOTH:
-//  * /health        — the direct-FQDN readiness polling step
-//  * /mcp/health    — the gateway-reachability step, which can only be
+//  * /health        â€” the direct-FQDN readiness polling step
+//  * /mcp/health    â€” the gateway-reachability step, which can only be
 //                     reached as {base}/{participant}/mcp/health because the
 //                     shared agentgateway regex only matches under /mcp.
 app.MapGet("/health", () => Results.Text("ok"));
@@ -92,11 +94,27 @@ app.MapGet("/mcp", (McpHttpEndpoint endpoint) => Results.Json(endpoint.Capabilit
 
 app.Run();
 
-// Minimal-API local function — declared after app.Run() so top-level
+// Minimal-API local function â€” declared after app.Run() so top-level
 // statements precede the type/method-free body as required.
 async Task<IResult> HandleChatRequest(HttpRequest request, HttpResponse response, McpAgentRuntime agent)
 {
     var message = await ReadMessageAsync(request);
+
+    // Read X-Session-Customer-Id header; pass it explicitly to the agent which
+    // builds a customer-scoped MCP bridge. Without the header, the agent uses
+    // the default scope from environment variables (Maria Chen / account 101).
+    int? customerId = null;
+    if (request.Headers.TryGetValue("X-Session-Customer-Id", out var customerIdValues)
+        && int.TryParse(customerIdValues.FirstOrDefault(), out var parsed)
+        && parsed > 0)
+    {
+        customerId = parsed;
+    }
+
+    // Wire-transfer amount cross-check: store the original user message on the
+    // default AccountTools singleton (best-effort; per-customer bridges use a
+    // different instance and won't see this).
+    request.HttpContext.RequestServices.GetRequiredService<AccountTools>().SetCurrentMessage(message);
 
     using var activity = BankingActivitySources.Source.StartActivity("bankingapp.chat", ActivityKind.Server);
     activity?.SetTag("fde.message", message);
@@ -104,12 +122,12 @@ async Task<IResult> HandleChatRequest(HttpRequest request, HttpResponse response
     string reply;
     try
     {
-        reply = await agent.RunAsync(message, request.HttpContext.RequestAborted);
+        reply = await agent.RunAsync(message, customerId, rawUserMessage: message, cancellationToken: request.HttpContext.RequestAborted);
         reply = promptGuard.Apply(reply);
     }
     catch (Exception ex)
     {
-        // Always log the upstream/agent failure — without this a gateway 400 or
+        // Always log the upstream/agent failure â€” without this a gateway 400 or
         // tool-call error surfaces only as an opaque 500 with empty container logs.
         app.Logger.LogError(ex, "chat request failed; message={Message}", message);
         activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
@@ -151,3 +169,4 @@ static async Task<string> ReadMessageAsync(HttpRequest request)
 
     return "";
 }
+

@@ -48,8 +48,8 @@ public sealed class BankingDbSeeder
 
         using (var check = connection.CreateCommand())
         {
-            check.CommandText = "SELECT COUNT(*) FROM customers WHERE id = 1";
-            if (Convert.ToInt64(check.ExecuteScalar()) > 0)
+            check.CommandText = "SELECT COUNT(*) FROM customers WHERE id IN (1, 2)";
+            if (Convert.ToInt64(check.ExecuteScalar()) == 2)
             {
                 _logger.LogInformation("legacy_bank.db seed present at {DbPath}", _db.DbPath);
                 return;
@@ -59,19 +59,24 @@ public sealed class BankingDbSeeder
         using (var seed = connection.CreateCommand())
         {
             seed.CommandText = """
-                INSERT INTO customers (id, name) VALUES (1, 'Maria Chen');
+                INSERT OR IGNORE INTO customers (id, name) VALUES (1, 'Maria Chen');
+                INSERT OR IGNORE INTO customers (id, name) VALUES (2, 'Robert Davis');
 
-                INSERT INTO accounts (id, customer_id, account_number, name, balance_cents, currency)
+                INSERT OR IGNORE INTO accounts (id, customer_id, account_number, name, balance_cents, currency)
                 VALUES (101, 1, '101', 'Checking', 452310, 'USD'),
-                       (102, 1, '102', 'Savings',   125000, 'USD');
+                       (102, 1, '102', 'Savings',   125000, 'USD'),
+                       (201, 2, '201', 'Savings',   500000, 'USD');
 
-                INSERT INTO transactions (id, account_id, amount_cents, description, occurred_at) VALUES
+                INSERT OR IGNORE INTO transactions (id, account_id, amount_cents, description, occurred_at) VALUES
                     (1, 101,  250000, 'Payroll deposit',              '2026-09-05T00:00:00Z'),
                     (2, 101, -155000, 'Credit card payment',          '2026-09-01T00:00:00Z'),
                     (3, 101,  -45000, 'Grocery store purchase',       '2026-08-28T00:00:00Z'),
                     (4, 101,  120000, 'Mobile deposit — cheque',      '2026-08-20T00:00:00Z'),
                     (5, 102,  500000, 'Transfer from checking',       '2026-09-02T00:00:00Z'),
                     (6, 102,   -2500, 'Monthly account service fee',  '2026-09-01T00:00:00Z');
+                INSERT OR IGNORE INTO transactions (id, account_id, amount_cents, description, occurred_at) VALUES
+                    (7, 201,  200000, 'Payroll deposit',              '2026-09-05T00:00:00Z'),
+                    (8, 201,  -50000, 'Rent payment',                 '2026-09-01T00:00:00Z');
                 """;
             seed.ExecuteNonQuery();
         }

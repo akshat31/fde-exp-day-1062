@@ -1,6 +1,5 @@
 using System.Reflection;
 using System.Text.Json;
-using BankingApp.Data;
 using BankingApp.Tools;
 using ModelContextProtocol.Server;
 
@@ -16,9 +15,8 @@ public sealed class McpToolCatalog
 {
     private readonly IReadOnlyList<McpToolDefinition> _definitions;
 
-    public McpToolCatalog(BankingDbConnectionFactory db, FdeOptions fde)
+    public McpToolCatalog(AccountTools accounts)
     {
-        var accounts = new AccountTools(db, fde);
         var phone = new PhoneNormalizer();
 
         _definitions =

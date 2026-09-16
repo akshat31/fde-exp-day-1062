@@ -13,10 +13,10 @@ public sealed class FdeOptions
 
     private readonly IConfiguration _config;
 
-    public string ParticipantId => _config["FDE_PARTICIPANT_ID"] ?? "local";
     public string NumericId => _config["FDE_NUMERIC_ID"] ?? "9999";
-    public string PodId => _config["FDE_POD_ID"] ?? "local-pod";
-    public string EventId => _config["FDE_EVENT_ID"] ?? "local-event";
+    public string ParticipantId => _config["FDE_PARTICIPANT_ID"] ?? $"FDE-{NumericId}";
+    public string PodId => _config["FDE_POD_ID"] ?? "POD-01";
+    public string EventId => _config["FDE_EVENT_ID"] ?? "fde-expday-2026-09";
     public string WorkloadType => _config["FDE_WORKLOAD_TYPE"] ?? "fde_agent";
 
     /// <summary>Agent Gateway base URL (LLM side). The OpenAI SDK appends /v1 internally.</summary>

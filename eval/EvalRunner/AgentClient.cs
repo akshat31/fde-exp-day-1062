@@ -16,13 +16,17 @@ public sealed class AgentClient
 
     public sealed record Reply(string Text, string? TraceId);
 
-    public async Task<Reply> AskAsync(string baseUrl, string message, CancellationToken ct = default)
+    public async Task<Reply> AskAsync(string baseUrl, string message, int? sessionCustomerId = null, CancellationToken ct = default)
     {
         var url = new Uri(baseUrl.TrimEnd('/') + "/chat");
         using var content = new StringContent(
             JsonSerializer.Serialize(new { message }),
             System.Text.Encoding.UTF8,
             "application/json");
+        if (sessionCustomerId.HasValue)
+        {
+            content.Headers.Add("X-Session-Customer-Id", sessionCustomerId.Value.ToString());
+        }
 
         using var response = await _http.PostAsync(url, content, ct);
         if (!response.IsSuccessStatusCode)
