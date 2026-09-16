@@ -37,9 +37,9 @@ internal static class EvalRuntime
         var client = new LangfuseScoreClient(http, publicKey, secretKey);
         try
         {
-            await client.PostScoreAsync(
+            var (link, viaSession) = await client.PostScoreAsync(
                 LangfuseBaseUrl, traceId, name, value, ParticipantId, PodId, EventId, ct);
-            Console.WriteLine($"[score] posted {name} = {value:0.##} for {ParticipantId} (trace {traceId})");
+            Console.WriteLine($"[score] posted {name} = {value:0.##} for {ParticipantId} ({(viaSession ? "session" : "trace")} {link})");
         }
         catch (Exception ex)
         {
