@@ -29,6 +29,13 @@ public sealed class FdeOptions
     public string LangfuseOtlpHeaders => _config["FDE_LANGFUSE_OTLP_HEADERS"] ?? "";
 
     /// <summary>
+    /// Langfuse session id used when a request doesn't pin a customer (no
+    /// X-Session-Customer-Id header). Groups this participant/pod's traces into
+    /// one Langfuse session; the chat handler overrides it per resolved customer.
+    /// </summary>
+    public string SessionId => $"{ParticipantId}-{PodId}-cust{SessionCustomerId}";
+
+    /// <summary>
     /// The authenticated session's customer id. In the event topology the shared
     /// agent gateway owns authentication and would inject this; the app's only
     /// job is to enforce whatever scope the deployment tells it. Defaults to the

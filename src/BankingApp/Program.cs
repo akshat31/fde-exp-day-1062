@@ -116,6 +116,15 @@ async Task<IResult> HandleChatRequest(HttpRequest request, HttpResponse response
     // different instance and won't see this).
     request.HttpContext.RequestServices.GetRequiredService<AccountTools>().SetCurrentMessage(message);
 
+    // Langfuse session context: set BEFORE the root activity starts so the span
+    // processor stamps langfuse.session.id on every span of the trace (root and
+    // agent children) and Langfuse groups the run into one Session object.
+    SessionScope.Set(
+        customerId is { } resolved && resolved > 0
+            ? $"{fde.ParticipantId}-{fde.PodId}-cust{resolved}"
+            : fde.SessionId,
+        fde.ParticipantId);
+
     using var activity = BankingActivitySources.Source.StartActivity("bankingapp.chat", ActivityKind.Server);
     activity?.SetTag("fde.message", message);
 

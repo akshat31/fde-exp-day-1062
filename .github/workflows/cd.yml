@@ -170,7 +170,7 @@ jobs:
           export FDE_AGENT_GATEWAY_ENDPOINT="${{ secrets.FDE_AGENT_GATEWAY_ENDPOINT }}"
           export FDE_AGENT_GATEWAY_KEY="${{ secrets.FDE_AGENT_GATEWAY_KEY }}"
           export FDE_LANGFUSE_OTLP_ENDPOINT="${{ vars.FDE_LANGFUSE_BASE_URL }}/api/public/otlp/v1/traces"
-          export FDE_LANGFUSE_OTLP_HEADERS="Authorization: Basic $(printf '%s:%s' "${{ secrets.FDE_LANGFUSE_PUBLIC_KEY }}" "${{ secrets.FDE_LANGFUSE_SECRET_KEY }}" | base64 | tr -d '\n')"
+          export FDE_LANGFUSE_OTLP_HEADERS="${{ secrets.FDE_LANGFUSE_OTLP_HEADERS }}"
           envsubst < .azure/container-app.tmpl.yaml > .azure/container-app.resolved.yaml
           az containerapp update \
             --name $CONTAINERAPP_NAME \
