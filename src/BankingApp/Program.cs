@@ -22,23 +22,34 @@ var fde = new FdeOptions(builder.Configuration);
 // ---- Telemetry: ONE OTel pipeline, built once. The participant-attribute
 // span processor is the consolidated host's replacement for the two separate
 // OTel setups the two source projects each had â€” no double registration.
-// OTLP export only when the deploy env supplies the Langfuse endpoint.
+// Built explicitly via Sdk.CreateTracerProviderBuilder() instead of the DI
+// hosted AddOpenTelemetry() registration: a transitive package (Microsoft.Agents /
+// Microsoft.Extensions.AI) also calls AddOpenTelemetry(), and its provider
+// shadows this one in DI, silently swallowing the OTLP exporter so no traces
+// ever left the app. This instance is owned here and disposed after app.Run()
+// so the batch processor flushes its queue on shutdown.
+TracerProvider? langfuseTracer = null;
 if (!string.IsNullOrWhiteSpace(fde.LangfuseOtlpEndpoint))
 {
-    builder.Services.AddOpenTelemetry()
-        .WithTracing(tracing => tracing
-            .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("banking-app"))
-            .AddSource(BankingActivitySources.Name)
-            .AddProcessor(new ParticipantAttributeProcessor(fde))
-            .AddOtlpExporter(options =>
+    langfuseTracer = Sdk.CreateTracerProviderBuilder()
+        .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("banking-app"))
+        .AddSource(BankingActivitySources.Name)
+        .AddProcessor(new ParticipantAttributeProcessor(fde))
+        .AddOtlpExporter(options =>
+        {
+            options.Endpoint = new Uri(fde.LangfuseOtlpEndpoint);
+            options.Protocol = OtlpExportProtocol.HttpProtobuf;
+            if (!string.IsNullOrWhiteSpace(fde.LangfuseOtlpHeaders))
             {
-                options.Endpoint = new Uri(fde.LangfuseOtlpEndpoint);
-                options.Protocol = OtlpExportProtocol.HttpProtobuf;
-                if (!string.IsNullOrWhiteSpace(fde.LangfuseOtlpHeaders))
-                {
-                    options.Headers = fde.LangfuseOtlpHeaders;
-                }
-            }));
+                options.Headers = fde.LangfuseOtlpHeaders;
+            }
+        })
+        .Build();
+    Console.WriteLine($"[telemetry] Langfuse OTLP export enabled -> {fde.LangfuseOtlpEndpoint}");
+}
+else
+{
+    Console.WriteLine("[telemetry] Langfuse OTLP export DISABLED (no endpoint) - set FDE_LANGFUSE_BASE_URL or FDE_LANGFUSE_OTLP_ENDPOINT");
 }
 
 // ---- DI: the consolidated host's services, combining the two source
@@ -94,6 +105,9 @@ app.MapGet("/mcp", (McpHttpEndpoint endpoint) => Results.Json(endpoint.Capabilit
 
 app.Run();
 
+// Flush + dispose the Langfuse tracer so the batch processor drains queued spans.
+langfuseTracer?.Dispose();
+
 // Minimal-API local function â€” declared after app.Run() so top-level
 // statements precede the type/method-free body as required.
 async Task<IResult> HandleChatRequest(HttpRequest request, HttpResponse response, McpAgentRuntime agent)
@@ -125,7 +139,17 @@ async Task<IResult> HandleChatRequest(HttpRequest request, HttpResponse response
             : fde.SessionId,
         fde.ParticipantId);
 
-    using var activity = BankingActivitySources.Source.StartActivity("bankingapp.chat", ActivityKind.Server);
+    // ASP.NET Core's hosting layer has already set a source-less, non-recording
+    // Activity.Current (Microsoft.AspNetCore.Hosting.HttpRequestIn). Starting a
+    // child transport span under it would make .NET return null (not sampled),
+    // so no span would ever be created nor exported. Hand the source an explicit
+    // recorded parent context instead: .NET then samples the chat span and it
+    // becomes the OTLP/Langfuse trace root (with the HTTP request as lineage).
+    var ambientCurrent = Activity.Current;
+    var parentCtx = ambientCurrent is not null
+        ? new ActivityContext(ambientCurrent.TraceId, ambientCurrent.SpanId, ActivityTraceFlags.Recorded, ambientCurrent.TraceStateString)
+        : default;
+    using var activity = BankingActivitySources.Source.StartActivity("bankingapp.chat", ActivityKind.Server, parentCtx);
     activity?.SetTag("fde.message", message);
 
     string reply;

@@ -145,7 +145,7 @@ jobs:
       # Langfuse needs no separate OTLP credential pair. Both Langfuse pipes
       # authenticate with the same public:secret key pair as HTTP Basic auth,
       # and both live on the one Langfuse host (FDE_LANGFUSE_BASE_URL): OTLP
-      # traces at /api/public/otlp/v1/traces (runtime app), scores at
+      # traces at /api/public/otel/v1/traces (runtime app), scores at
       # /api/public/v3/scores (eval steps). cd.yml derives the OTLP endpoint
       # + headers here from the single variable + the two keys, so forks only
       # provision FDE_LANGFUSE_BASE_URL, FDE_LANGFUSE_PUBLIC_KEY,
@@ -169,7 +169,7 @@ jobs:
           export FDE_WORKLOAD_TYPE="fde_agent"
           export FDE_AGENT_GATEWAY_ENDPOINT="${{ secrets.FDE_AGENT_GATEWAY_ENDPOINT }}"
           export FDE_AGENT_GATEWAY_KEY="${{ secrets.FDE_AGENT_GATEWAY_KEY }}"
-          export FDE_LANGFUSE_OTLP_ENDPOINT="${{ vars.FDE_LANGFUSE_BASE_URL }}/api/public/otlp/v1/traces"
+          export FDE_LANGFUSE_OTLP_ENDPOINT="${{ vars.FDE_LANGFUSE_BASE_URL }}/api/public/otel/v1/traces"
           export FDE_LANGFUSE_OTLP_HEADERS="${{ secrets.FDE_LANGFUSE_OTLP_HEADERS }}"
           envsubst < .azure/container-app.tmpl.yaml > .azure/container-app.resolved.yaml
           az containerapp update \

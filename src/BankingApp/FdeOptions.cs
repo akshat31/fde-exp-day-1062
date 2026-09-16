@@ -25,8 +25,68 @@ public sealed class FdeOptions
     public string GatewayKey => _config["FDE_AGENT_GATEWAY_KEY"] ?? "";
     public string GatewayModel => _config["FDE_AGENT_GATEWAY_MODEL"] ?? "gpt-5.1";
 
-    public string LangfuseOtlpEndpoint => _config["FDE_LANGFUSE_OTLP_ENDPOINT"] ?? "";
-    public string LangfuseOtlpHeaders => _config["FDE_LANGFUSE_OTLP_HEADERS"] ?? "";
+    /// <summary>Langfuse host, e.g. https://cloud.langfuse.com.</summary>
+    public string LangfuseBaseUrl => (_config["FDE_LANGFUSE_BASE_URL"] ?? "").TrimEnd('/');
+
+    public string LangfusePublicKey => _config["FDE_LANGFUSE_PUBLIC_KEY"] ?? "";
+    public string LangfuseSecretKey => _config["FDE_LANGFUSE_SECRET_KEY"] ?? "";
+
+    /// <summary>
+    /// OTLP traces endpoint. Uses the explicit FDE_LANGFUSE_OTLP_ENDPOINT when
+    /// provided; otherwise derives it from the Langfuse host the same way
+    /// cd.yml does, so a local .env that only sets the base URL + keys works.
+    /// Langfuse serves OTLP at /api/public/otel/v1/traces — /api/public/otlp/
+    /// is not a real route and 404s.
+    /// </summary>
+    public string LangfuseOtlpEndpoint
+    {
+        get
+        {
+            var explicitEndpoint = _config["FDE_LANGFUSE_OTLP_ENDPOINT"] ?? "";
+            if (!string.IsNullOrWhiteSpace(explicitEndpoint))
+            {
+                return explicitEndpoint.Trim();
+            }
+
+            return string.IsNullOrEmpty(LangfuseBaseUrl)
+                ? ""
+                : $"{LangfuseBaseUrl}/api/public/otel/v1/traces";
+        }
+    }
+
+    /// <summary>
+    /// OTLP request headers. Uses the explicit FDE_LANGFUSE_OTLP_HEADERS when
+    /// provided; otherwise derives HTTP Basic auth from the public:secret key
+    /// pair (same derivation cd.yml uses). Always guarantees the
+    /// x-langfuse-ingestion-version header so direct-OTLP data appears in real
+    /// time instead of being delayed up to ~10 minutes.
+    /// </summary>
+    public string LangfuseOtlpHeaders
+    {
+        get
+        {
+            string headers;
+            var explicitHeaders = _config["FDE_LANGFUSE_OTLP_HEADERS"] ?? "";
+            if (!string.IsNullOrWhiteSpace(explicitHeaders))
+            {
+                headers = explicitHeaders.Trim();
+            }
+            else if (string.IsNullOrEmpty(LangfusePublicKey) || string.IsNullOrEmpty(LangfuseSecretKey))
+            {
+                headers = "";
+            }
+            else
+            {
+                var basic = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{LangfusePublicKey}:{LangfuseSecretKey}"));
+                headers = $"Authorization=Basic {basic}";
+            }
+
+            return string.IsNullOrWhiteSpace(headers) ||
+                   headers.Contains("x-langfuse-ingestion-version", StringComparison.OrdinalIgnoreCase)
+                ? headers
+                : $"{headers},x-langfuse-ingestion-version=4";
+        }
+    }
 
     /// <summary>
     /// Langfuse session id used when a request doesn't pin a customer (no
