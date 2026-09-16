@@ -51,6 +51,12 @@ builder.Services.AddSingleton<McpHttpEndpoint>();
 
 var app = builder.Build();
 
+// Output-side system-prompt disclosure guard: if the agent echoes a
+// distinctive SystemPrompt.md line, /chat returns a denial instead. This is the
+// deterministic enforcement for M3 S3 — the prompt's own rules are probabilistic
+// by nature and cannot be trusted to stop an echo.
+var promptGuard = SystemPromptGuard.Load(Path.Combine(app.Environment.ContentRootPath, "SystemPrompt.md"));
+
 // The seed is idempotent. On Container Apps ephemeral storage the baked
 // legacy_bank.db copy lands in a writable overlay the first boot; in the
 // rare case it can't be written the app keeps serving the read tools anyway.
@@ -99,6 +105,7 @@ async Task<IResult> HandleChatRequest(HttpRequest request, HttpResponse response
     try
     {
         reply = await agent.RunAsync(message, request.HttpContext.RequestAborted);
+        reply = promptGuard.Apply(reply);
     }
     catch (Exception ex)
     {

@@ -33,7 +33,7 @@ public static class Milestone2Command
         var results = await evaluator.EvaluateAsync(new[] { evalItem }, "milestone2");
         var passed = results.AllPassed;
 
-        Console.WriteLine($"[m2] reply: {Truncate(reply.Text)}");
+        Console.WriteLine($"[m2] reply: {reply.Text}");
         Console.WriteLine($"[m2] traceId: {reply.TraceId ?? "(none)"}");
         foreach (var kv in results.Items[0].Metrics)
         {
@@ -66,7 +66,4 @@ public static class Milestone2Command
     private static bool IsTransient(Exception ex) =>
         ex is HttpRequestException or TimeoutException or TaskCanceledException ||
         (ex.InnerException is not null && IsTransient(ex.InnerException));
-
-    private static string Truncate(string value) =>
-        value.Length <= 140 ? value : value[..140] + "…";
 }

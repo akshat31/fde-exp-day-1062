@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.ClientModel;
 using System.IO.Pipelines;
 using System.Text.Json;
 using Microsoft.Agents.AI;
@@ -66,8 +67,21 @@ public sealed class McpAgentRuntime : IAsyncDisposable
             return "ERROR: agent is not available. Check FDE_AGENT_GATEWAY_ENDPOINT/FDE_AGENT_GATEWAY_KEY configuration.";
         }
 
-        var response = await state.Agent.RunAsync(message);
-        return response.Text;
+        try
+        {
+            var response = await state.Agent.RunAsync(message);
+            return response.Text;
+        }
+        catch (ClientResultException ex) when (ex.Status == 400)
+        {
+            // The upstream AI gateway (Azure content filter / Agent Gateway policy)
+            // rejected this prompt. Return a clean structured response instead of
+            // crashing to an unhandled 500. Whether provider-level blocking should
+            // count as a Milestone 3 pass is an open design question — this fix
+            // just stops the crash.
+            _logger.LogWarning(ex, "Upstream gateway rejected prompt (HTTP 400). Message: {Message}", message);
+            return "BLOCKED_BY_PROVIDER: The request was rejected by the upstream AI gateway content filter.";
+        }
     }
 
     private async Task<RuntimeState> InitializeAsync()

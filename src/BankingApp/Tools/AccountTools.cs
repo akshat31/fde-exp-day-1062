@@ -9,20 +9,38 @@ namespace BankingApp.Tools;
 /// BankingApp from the Session 2 scaffold's BankingMcpServer. All writes
 /// (wire transfers) are simulated and gate on the participant's wired
 /// threshold so Milestone 3 can observe a deterministic PAUSED state.
+///
+/// Scope enforcement lives HERE, in code, not in the system prompt: every read
+/// tool refuses any account outside <see cref="FdeOptions.SessionAccountIds"/>
+/// (the authenticated session's allowed set). The model cannot talk its way past
+/// a WHERE clause, so the plain-language rules in SystemPrompt.md are a
+/// belt-and-suspenders layer on top of a deterministic check, not the check.
 /// </summary>
 public sealed class AccountTools
 {
     private readonly BankingDbConnectionFactory _db;
     private readonly FdeOptions _fde;
+    private readonly int _sessionCustomerId;
+    private readonly IReadOnlyList<int> _sessionAccountIds;
 
     public AccountTools(BankingDbConnectionFactory db, FdeOptions fde)
     {
         _db = db;
         _fde = fde;
+        _sessionCustomerId = fde.SessionCustomerId;
+        _sessionAccountIds = fde.SessionAccountIds;
     }
+
+    private static string Denied(int accountId, IReadOnlyList<int> allowed) =>
+        $"DENIED: account {accountId} is outside the authenticated session's scope (session accounts: {string.Join(", ", allowed)}).";
 
     public string GetBalance(int accountId)
     {
+        if (!_sessionAccountIds.Contains(accountId))
+        {
+            return Denied(accountId, _sessionAccountIds);
+        }
+
         using var connection = _db.Create();
         using var command = connection.CreateCommand();
         command.CommandText = """
@@ -48,11 +66,17 @@ public sealed class AccountTools
 
     public string ListAccounts()
     {
+        if (_sessionAccountIds.Count == 0)
+        {
+            return "no accounts in the authenticated session's scope";
+        }
+
         using var connection = _db.Create();
         using var command = connection.CreateCommand();
-        command.CommandText = """
+        command.CommandText = $"""
             SELECT c.name, a.id, a.account_number, a.name, a.balance_cents, a.currency
             FROM accounts a JOIN customers c ON c.id = a.customer_id
+            WHERE a.id IN ({string.Join(", ", _sessionAccountIds)})
             ORDER BY a.id
             """;
 
@@ -74,6 +98,11 @@ public sealed class AccountTools
 
     public string GetTransactionHistory(int accountId, int limit = 5)
     {
+        if (!_sessionAccountIds.Contains(accountId))
+        {
+            return Denied(accountId, _sessionAccountIds);
+        }
+
         using var connection = _db.Create();
         using var command = connection.CreateCommand();
         command.CommandText = """
