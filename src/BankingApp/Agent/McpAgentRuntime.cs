@@ -77,7 +77,9 @@ public sealed class McpAgentRuntime : IAsyncDisposable
         }
         catch (ClientResultException ex) when (ex.Status == 400)
         {
-            _logger.LogWarning(ex, "Upstream gateway rejected prompt (HTTP 400). Message: {Message}", message);
+_logger.LogWarning(
+                "Upstream AI gateway rejected prompt (HTTP 400). Reason: {Reason}. Message: {Message}",
+                SummarizeGatewayError(ex), message);
             return "BLOCKED_BY_PROVIDER: The request was rejected by the upstream AI gateway content filter.";
         }
     }
@@ -99,6 +101,70 @@ public sealed class McpAgentRuntime : IAsyncDisposable
 
         genAi?.SetTag("gen_ai.response.body", response.Text);
         return response.Text;
+    }
+
+    /// <summary>
+    /// Extracts a one-line reason from the gateway's 400 body (OpenAI/AOAI
+    /// content-filter shapes) so the log is scannable — a real 400 (e.g. model
+    /// misconfiguration) still falls back to the truncated raw body so it can't
+    /// be mistaken for an expected content-safety block.
+    /// </summary>
+    private static string SummarizeGatewayError(ClientResultException ex)
+    {
+        try
+        {
+            var body = ex.GetRawResponse()?.Content?.ToString();
+            if (string.IsNullOrWhiteSpace(body))
+                return "(no error body)";
+
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("error", out var err) && err.ValueKind == JsonValueKind.Object)
+            {
+                var combined = CombineReason(err);
+                if (combined is not null)
+                    return combined;
+            }
+
+            if (root.TryGetProperty("choices", out var choices) &&
+                choices.ValueKind == JsonValueKind.Array && choices.GetArrayLength() > 0)
+            {
+                var choice = choices[0];
+                if (choice.ValueKind == JsonValueKind.Object)
+                {
+                    if (choice.TryGetProperty("content_filter_results", out var cfr) &&
+                        cfr.ValueKind == JsonValueKind.Object &&
+                        cfr.TryGetProperty("error", out var cerr) && cerr.ValueKind == JsonValueKind.Object)
+                    {
+                        var detail = CombineReason(cerr);
+                        if (detail is not null)
+                            return detail;
+                    }
+
+                    if (choice.TryGetProperty("finish_reason", out var finishReason) &&
+                        string.Equals(finishReason.GetString(), "content_filter", StringComparison.OrdinalIgnoreCase))
+                        return "content_filter (response escaped the content filter)";
+                }
+            }
+
+            return "gateway 400: " + (body.Length <= 200 ? body : body[..200]);
+        }
+        catch
+        {
+            return "(unreadable error body)";
+        }
+    }
+
+    private static string? CombineReason(JsonElement error)
+    {
+        var code = error.TryGetProperty("code", out var c) ? c.GetString() : null;
+        var message = error.TryGetProperty("message", out var m) ? m.GetString() : null;
+        if (string.IsNullOrWhiteSpace(code) && string.IsNullOrWhiteSpace(message))
+            return null;
+        return string.IsNullOrWhiteSpace(message)
+            ? code
+            : $"{code}: {message}";
     }
 
     private async Task<RuntimeState> ResolveStateAsync(int? customerId, string? rawUserMessage, CancellationToken ct)
