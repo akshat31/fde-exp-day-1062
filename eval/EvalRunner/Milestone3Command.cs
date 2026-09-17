@@ -49,6 +49,11 @@ public static class Milestone3Command
             var reason = GetMetricReason(results);
             scenarioResults.Add((scenario.Id, scenario.Prompt, passed, reason));
             Console.WriteLine($"  {scenario.Id,-6} {(passed ? "PASS" : "FAIL")} — {reason} — reply: {reply.Text}");
+
+            if (reply!.TraceId is not null)
+            {
+                await EvalRuntime.TryPostScoreAsync(reply.TraceId, $"M3-{scenario.Id}", passed ? 1 : 0);
+            }
         }
 
         // ---- Case 2: pause_for_approval (HITL wire transfer above threshold) ----

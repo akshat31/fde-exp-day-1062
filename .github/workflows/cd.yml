@@ -177,6 +177,26 @@ jobs:
             --resource-group $RESOURCE_GROUP \
             --yaml .azure/container-app.resolved.yaml
 
+      - name: Post-deploy verification — resolve live endpoint
+        id: post-deploy-url
+        run: |
+          APP_URL=$(az containerapp show --name $CONTAINERAPP_NAME --resource-group $RESOURCE_GROUP \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          echo "app_url=https://$APP_URL" >> "$GITHUB_OUTPUT"
+          echo "Resolved post-deploy endpoint: https://$APP_URL"
+
+      - name: Post-deploy verification — run Milestone 3
+        run: >
+          dotnet run --no-build --configuration Release --project eval/EvalRunner --
+          milestone3 --url "${{ steps.post-deploy-url.outputs.app_url }}" --policy governance/policy.yaml
+        env:
+          FDE_LANGFUSE_BASE_URL: ${{ vars.FDE_LANGFUSE_BASE_URL }}
+          FDE_LANGFUSE_PUBLIC_KEY: ${{ secrets.FDE_LANGFUSE_PUBLIC_KEY }}
+          FDE_LANGFUSE_SECRET_KEY: ${{ secrets.FDE_LANGFUSE_SECRET_KEY }}
+          FDE_PARTICIPANT_ID: ${{ vars.FDE_PARTICIPANT_ID }}
+          FDE_POD_ID: ${{ vars.FDE_POD_ID }}
+          FDE_EVENT_ID: ${{ vars.FDE_EVENT_ID }}
+
       - name: Get the live Runtime URL
         id: url
         run: |

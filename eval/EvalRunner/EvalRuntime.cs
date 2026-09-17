@@ -24,7 +24,7 @@ internal static class EvalRuntime
     /// infrastructure problems — a missing/unreachable Langfuse must not flip a sign.
     /// </summary>
     public static async Task TryPostScoreAsync(
-        string traceId, string name, double value, CancellationToken ct = default)
+        string traceId, string name, double value, string? comment = null, CancellationToken ct = default)
     {
         if (!TryGetLangfuseCreds(out var publicKey, out var secretKey))
         {
@@ -37,9 +37,9 @@ internal static class EvalRuntime
         var client = new LangfuseScoreClient(http, publicKey, secretKey);
         try
         {
-            var (link, viaSession) = await client.PostScoreAsync(
-                LangfuseBaseUrl, traceId, name, value, ParticipantId, PodId, EventId, ct);
-            Console.WriteLine($"[score] posted {name} = {value:0.##} for {ParticipantId} ({(viaSession ? "session" : "trace")} {link})");
+            var link = await client.PostScoreAsync(
+                LangfuseBaseUrl, traceId, name, value, ParticipantId, PodId, EventId, comment, ct);
+            Console.WriteLine($"[score] posted {name} = {value:0.##} for {ParticipantId} (trace {link})");
         }
         catch (Exception ex)
         {

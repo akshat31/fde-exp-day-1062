@@ -63,6 +63,12 @@ jobs:
       - name: PromptDefense grade (if a system prompt exists yet)
         if: hashFiles('src/BankingApp/SystemPrompt.md') != '' && hashFiles('eval/EvalRunner/EvalRunner.csproj') != ''
         run: dotnet run --no-build --configuration Release --project eval/EvalRunner -- promptdefense
+        env:
+          FDE_LANGFUSE_PUBLIC_KEY: ${{ secrets.FDE_LANGFUSE_PUBLIC_KEY }}
+          FDE_LANGFUSE_SECRET_KEY: ${{ secrets.FDE_LANGFUSE_SECRET_KEY }}
+          FDE_PARTICIPANT_ID: ${{ vars.FDE_PARTICIPANT_ID }}
+          FDE_POD_ID: ${{ vars.FDE_POD_ID }}
+          FDE_EVENT_ID: ${{ vars.FDE_EVENT_ID }}
 
       - name: Comment results on PR
         if: always()
