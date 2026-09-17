@@ -77,14 +77,84 @@ public sealed class McpAgentRuntime : IAsyncDisposable
         }
         catch (ClientResultException ex) when (ex.Status == 400)
         {
-            // The upstream AI gateway (Azure content filter / Agent Gateway policy)
-            // rejected this prompt. Return a clean structured response instead of
-            // crashing to an unhandled 500. Whether provider-level blocking should
-            // count as a Milestone 3 pass is an open design question — this fix
-            // just stops the crash.
-            _logger.LogWarning(ex, "Upstream gateway rejected prompt (HTTP 400). Message: {Message}", message);
+            // Expected, not a crash: the upstream AI gateway's content-safety /
+            // jailbreak policy rejects adversarial prompts (e.g. the M3 "S4 DAN"
+            // scenario) with HTTP 400 — this is the defense working, and the
+            // /chat handler returns a graceful refusal instead of a 500. Keep
+            // that behavior, but log it as a compact one-liner: no exception
+            // stack and no raw JSON dump — just the readable reason extracted
+            // from the gateway body, so the run doesn't read like an outage.
+            _logger.LogWarning(
+                "Upstream AI gateway rejected prompt (HTTP 400). Reason: {Reason}. Message: {Message}",
+                SummarizeGatewayError(ex), message);
             return "BLOCKED_BY_PROVIDER: The request was rejected by the upstream AI gateway content filter.";
         }
+    }
+
+    /// <summary>
+    /// Extracts a one-line reason from the gateway's 400 body (OpenAI/AOAI
+    /// content-filter shapes) so the log is scannable — a real 400 (e.g. model
+    /// misconfiguration) still falls back to the truncated raw body so it can't
+    /// be mistaken for an expected content-safety block.
+    /// </summary>
+    private static string SummarizeGatewayError(ClientResultException ex)
+    {
+        try
+        {
+            var body = ex.GetRawResponse()?.Content?.ToString();
+            if (string.IsNullOrWhiteSpace(body))
+                return "(no error body)";
+
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+
+            // Shape 1: {"error":{"code":"...","message":"..."}}
+            if (root.TryGetProperty("error", out var err) && err.ValueKind == JsonValueKind.Object)
+            {
+                var combined = CombineReason(err);
+                if (combined is not null)
+                    return combined;
+            }
+
+            // Shape 2: {"choices":[{"finish_reason":"content_filter",...}]}
+            if (root.TryGetProperty("choices", out var choices) &&
+                choices.ValueKind == JsonValueKind.Array && choices.GetArrayLength() > 0)
+            {
+                var choice = choices[0];
+                if (choice.ValueKind == JsonValueKind.Object)
+                {
+                    if (choice.TryGetProperty("content_filter_results", out var cfr) &&
+                        cfr.ValueKind == JsonValueKind.Object &&
+                        cfr.TryGetProperty("error", out var cerr) && cerr.ValueKind == JsonValueKind.Object)
+                    {
+                        var detail = CombineReason(cerr);
+                        if (detail is not null)
+                            return detail;
+                    }
+
+                    if (choice.TryGetProperty("finish_reason", out var finishReason) &&
+                        string.Equals(finishReason.GetString(), "content_filter", StringComparison.OrdinalIgnoreCase))
+                        return "content_filter (response escaped the content filter)";
+                }
+            }
+
+            return "gateway 400: " + (body.Length <= 200 ? body : body[..200]);
+        }
+        catch
+        {
+            return "(unreadable error body)";
+        }
+    }
+
+    private static string? CombineReason(JsonElement error)
+    {
+        var code = error.TryGetProperty("code", out var c) ? c.GetString() : null;
+        var message = error.TryGetProperty("message", out var m) ? m.GetString() : null;
+        if (string.IsNullOrWhiteSpace(code) && string.IsNullOrWhiteSpace(message))
+            return null;
+        return string.IsNullOrWhiteSpace(message)
+            ? code
+            : $"{code}: {message}";
     }
 
     private async Task<RuntimeState> ResolveStateAsync(int? customerId, string? rawUserMessage, CancellationToken ct)
