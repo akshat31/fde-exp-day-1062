@@ -72,19 +72,33 @@ public sealed class McpAgentRuntime : IAsyncDisposable
 
         try
         {
-            var response = await state.Agent.RunAsync(message);
-            return response.Text;
+            var response = await RunAgentAsync(state, message);
+            return response;
         }
         catch (ClientResultException ex) when (ex.Status == 400)
         {
-            // The upstream AI gateway (Azure content filter / Agent Gateway policy)
-            // rejected this prompt. Return a clean structured response instead of
-            // crashing to an unhandled 500. Whether provider-level blocking should
-            // count as a Milestone 3 pass is an open design question — this fix
-            // just stops the crash.
             _logger.LogWarning(ex, "Upstream gateway rejected prompt (HTTP 400). Message: {Message}", message);
             return "BLOCKED_BY_PROVIDER: The request was rejected by the upstream AI gateway content filter.";
         }
+    }
+
+    private async Task<string> RunAgentAsync(RuntimeState state, string message)
+    {
+        if (state.Agent is null)
+            return "ERROR: agent is not available.";
+
+        using var genAi = ActivitySource.StartActivity("llm.generation", ActivityKind.Internal);
+        genAi?.SetTag("langfuse.observation.type", "generation");
+        genAi?.SetTag("gen_ai.system", "openai");
+        genAi?.SetTag("gen_ai.request.model", _fde.GatewayModel);
+        genAi?.SetTag("gen_ai.request.body", message);
+        genAi?.SetTag("gen_ai.usage.input_tokens", 0);
+        genAi?.SetTag("gen_ai.usage.output_tokens", 0);
+
+        var response = await state.Agent.RunAsync(message);
+
+        genAi?.SetTag("gen_ai.response.body", response.Text);
+        return response.Text;
     }
 
     private async Task<RuntimeState> ResolveStateAsync(int? customerId, string? rawUserMessage, CancellationToken ct)

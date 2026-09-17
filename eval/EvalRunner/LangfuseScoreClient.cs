@@ -21,8 +21,11 @@ public sealed class LangfuseScoreClient
 
     /// <summary>
     /// Posts a numeric score keyed directly to the provided traceId.
-    /// Identity tags are serialized in a structured metadata sub-object,
-    /// and an optional human-readable comment rides alongside.
+    /// userId is set to the participant identifier for dashboard filtering.
+    /// sessionId is deliberately omitted — the v1 API requires exactly one
+    /// link target and it conflicts with traceId. Identity tags are also
+    /// serialized in a structured metadata sub-object, and an optional
+    /// human-readable comment rides alongside.
     /// </summary>
     public async Task<string> PostScoreAsync(
         string langfuseBaseUrl,
@@ -46,6 +49,7 @@ public sealed class LangfuseScoreClient
             ? new
             {
                 traceId,
+                userId = participantId,
                 name,
                 value,
                 dataType = "NUMERIC",
@@ -61,6 +65,7 @@ public sealed class LangfuseScoreClient
             : new
             {
                 traceId,
+                userId = participantId,
                 name,
                 value,
                 dataType = "NUMERIC",
