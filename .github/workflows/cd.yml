@@ -270,6 +270,7 @@ jobs:
       # posting their scores. Direct-FQDN steps above stay green and the
       # failure stays precisely attributable to the gateway.
       - name: Confirm reachable through the shared gateway
+        if: always()
         run: curl -sf "${{ vars.FDE_GATEWAY_BASE_URL }}/${{ vars.FDE_PARTICIPANT_ID }}/mcp/health"
 
       # Stage 4's "final smoke test" is not a separate step — the health
